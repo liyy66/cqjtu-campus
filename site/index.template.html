@@ -530,8 +530,7 @@ body::after{
   <!-- ============ AI 问答 ============ -->
   <section id="panel-qa" class="panel active">
     <div class="update-bar" id="updateBarQa">
-      <span class="dot"></span><span id="updateTextQa">正在检查官方新闻更新…</span>
-      <button onclick="manualUpdate()">立即更新</button>
+      <span class="dot"></span><span id="updateTextQa">数据由云端每 6 小时自动更新</span>
     </div>
     <div class="chat-box" id="chatBox"></div>
     <div class="suggestions" id="suggestions">
@@ -553,8 +552,7 @@ body::after{
   <!-- ============ 新闻推送 ============ -->
   <section id="panel-feed" class="panel">
     <div class="update-bar" id="updateBarFeed">
-      <span class="dot"></span><span id="updateTextFeed">正在检查官方新闻更新…</span>
-      <button onclick="manualUpdate()">立即更新</button>
+      <span class="dot"></span><span id="updateTextFeed">数据由云端每 6 小时自动更新</span>
     </div>
     <div class="toolbar">
       <div class="chip-row" id="feedColumns"></div>
@@ -1087,7 +1085,6 @@ function mergeNews(items) {
 
 /* ========================= 在线自动更新 ===================== */
 const OFFICIAL = "https://news.cqjtu.edu.cn/";
-const COLUMNS = ["szyw", "zjal", "xxtz", "kxyj", "jxgz", "xydt", "zsjy", "rwjd", "hzjl", "xsxx", "zbxx", "xxxz", "mtjd"];
 const COL_NAMES = { szyw: "时政要闻", zjal: "精彩交大", jxgz: "教学工作", kxyj: "科学研究", hzjl: "合作交流", rwjd: "人文交大", zsjy: "招生就业", xydt: "学院动态", xxtz: "信息通知", xsxx: "学术信息", zbxx: "招标信息", xxxz: "莘莘学子", mtjd: "媒体交大" };
 const PROXIES = [
   (u) => u,
@@ -1119,35 +1116,6 @@ async function fetchText(url, timeoutMs = 9000) {
   }
   return null;
 }
-function parseNewsList(html, col) {
-  const out = [];
-  const seen = new Set();
-  const blocks = html.split(/<li[^>]*>/i).slice(1);
-  const reLink = /href=["']?((?:\.\.\/)*info\/\d+\/\d+\.htm)["']?/i;
-  const reTitle = /title=["']([^"']{4,120})["']/i;
-  const reAnchor = /<a[^>]*>\s*([^<]{4,120}?)\s*<\/a>/is;
-  const reDate = /(20\d{2}-\d{2}-\d{2}|20\d{2}年\d{1,2}月\d{1,2}日)/;
-  for (const b of blocks) {
-    const m = b.match(reLink);
-    if (!m) continue;
-    let u = m[1].replace(/^(\.\.\/)+/, "");
-    if (!/^https?:/i.test(u)) u = OFFICIAL + u;
-    if (seen.has(u)) continue;
-    const tm = b.match(reTitle) || b.match(reAnchor);
-    const title = (tm ? tm[1] : "").trim();
-    if (title.length < 4) continue;
-    const dm = b.match(reDate);
-    const date = dm ? dm[1].replace(/(\d{4})年(\d{1,2})月(\d{1,2})日/, (s, y, mo, d) =>
-      `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`) : "";
-    seen.add(u);
-    out.push({
-      id: u.match(/\/(\d+)\.htm$/)?.[1] || u,
-      title, url: u, date, column: col, column_name: COL_NAMES[col] || "新闻",
-      source: "", author: "", summary: "", content_text: "", content_html: "",
-    });
-  }
-  return out;
-}
 function parseArticle(html, url) {
   const title = (html.match(/<h1[^>]*class=["']article-title["'][^>]*>([\s\S]*?)<\/h1>/i)?.[1] || "").replace(/<[^>]+>/g, "").trim();
   const editor = (html.match(/<div[^>]*class=["']article-editor["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] || "").replace(/<[^>]+>/g, " ");
@@ -1173,42 +1141,11 @@ function setUpdate(state, text) {
   });
   ["#updateTextQa", "#updateTextFeed"].forEach((id) => { const el = $(id); if (el) el.textContent = text; });
 }
-let updating = false;
-async function autoUpdate(manual = false) {
-  if (updating) return;
-  updating = true;
-  setUpdate("busy", "正在从重庆交通大学官方新闻网获取最新新闻…");
-  try {
-    let html = await fetchText(OFFICIAL + "szyw.htm");
-    if (!html) {
-      setUpdate("fail", "⚠️ 当前网络无法访问官方新闻源，正在展示内置快照（" + (EMBED.generated || "") + "）。点击“立即更新”重试");
-      if (manual) toast("更新失败：网络受限，暂无法连接官方新闻网");
-      updating = false;
-      return;
-    }
-    let fetched = parseNewsList(html, "szyw");
-    const rest = COLUMNS.slice(1);
-    const results = await Promise.allSettled(rest.map((c) => fetchText(OFFICIAL + c + ".htm")));
-    results.forEach((r, i) => { if (r.status === "fulfilled" && r.value) fetched.push(...parseNewsList(r.value, rest[i])); });
-    const added = mergeNews(fetched);
-    saveNews(fetched);
-    const now = new Date();
-    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    setUpdate("ok", `✅ 已同步官方新闻至 ${stamp}（在线库共 ${NEWS.length} 条${added ? "，本次新增 " + added + " 条" : ""}）`);
-    if (manual) toast(added ? `更新完成：新增 ${added} 条官方新闻` : "已是最新，暂无新增新闻");
-    if (added) renderFeed();
-  } catch (e) {
-    setUpdate("fail", "⚠️ 更新出错，正在展示内置快照。点击“立即更新”重试");
-    if (manual) toast("更新出错，请稍后重试");
-  }
-  updating = false;
-}
-function manualUpdate() { haptic(14); autoUpdate(true); }
-/* 新闻数据由 GitHub Actions 每6 小时在云端抓取，并随页面一起发布。
-   原版靠浏览器 CORS 代理抓官网，但免费代理已相继失效（实测allorigins /
+/* 新闻数据由 GitHub Actions 每 6 小时在云端抓取，并随页面一起发布。
+   原版靠浏览器 CORS 代理抓官网，但免费代理已相继失效（实测 allorigins /
    codetabs 均 522 超时，corsproxy 返回自身错误页），只会一直失败并弹警告，
-   因此这里不再启动任何周期性抓取。
-   「立即更新」按钮仍可手动触发一次补充抓取（能成功就补充几条，失败也无妨）。 */
+   所以浏览器端的抓取与「立即更新」按钮已一并移除。
+   fetchText() 仍保留：openArticle 在正文分桶缺失时会用它兜底抓单篇原文。 */
 setUpdate("ok", `📦 官方新闻由云端每6 小时自动更新（数据截至 ${EMBED.generated || ""}，共 ${NEWS.length} 条）`);
 
 /* ========================= AI 问答 ========================= */
