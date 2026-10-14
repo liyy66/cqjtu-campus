@@ -1204,12 +1204,12 @@ async function autoUpdate(manual = false) {
   updating = false;
 }
 function manualUpdate() { haptic(14); autoUpdate(true); }
-/* 数据由 GitHub Actions 每6 小时在云端抓取并随页面一起发布，
-   所以这里不再启动浏览器端的 CORS 代理抓取（实测 allorigins /
-   codetabs 等免费代理已失效，只会一直失败并弹警告）。
-   保留 autoUpdate() 供手动点击「立即更新」时做一次补充抓取。 */
-setInterval(() => autoUpdate(false), 30 * 60 * 1000);
-setUpdate("ok", `📦 官方新闻数据已随页面更新（${EMBED.generated || ""}，共 ${NEWS.length} 条）`);
+/* 新闻数据由 GitHub Actions 每6 小时在云端抓取，并随页面一起发布。
+   原版靠浏览器 CORS 代理抓官网，但免费代理已相继失效（实测allorigins /
+   codetabs 均 522 超时，corsproxy 返回自身错误页），只会一直失败并弹警告，
+   因此这里不再启动任何周期性抓取。
+   「立即更新」按钮仍可手动触发一次补充抓取（能成功就补充几条，失败也无妨）。 */
+setUpdate("ok", `📦 官方新闻由云端每6 小时自动更新（数据截至 ${EMBED.generated || ""}，共 ${NEWS.length} 条）`);
 
 /* ========================= AI 问答 ========================= */
 function esc(s) {
@@ -1586,7 +1586,7 @@ renderConvList();
 renderChat();
 fxInit();
 applySkin(currentSkin(), true);
-setUpdate("ok", `📦 已加载内置官方数据快照（${EMBED.generated || ""}，${NEWS.length} 条新闻）· 正在后台同步最新新闻…`);
+setUpdate("ok", `📦 已加载官方新闻数据（截至 ${EMBED.generated || ""}，共 ${NEWS.length} 条）· 由云端每 6 小时自动更新`);
 </script>
 </body>
 </html>
