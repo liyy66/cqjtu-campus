@@ -8,9 +8,11 @@ data/news.json
 data/_list.json
 data/_last_update.json
 
-# 站点成品：每轮由 build_v3.py 重新生成，
-# 直接提交会让 git 反复重写大文件，仓库迅速臃肿。
-site/
+# 站点构建产物：每轮由 build_v3.py 重新生成，
+# 提交会让 git 反复重写大文件，仓库迅速臃肿。
+# 注意只排除产物，site/index.template.html 是**源码**（模板），必须入库！
+site/index.html
+site/data/
 
 # 本地工作区私有内容：自动化日志、记忆笔记、应用配置。
 .workbuddy/
