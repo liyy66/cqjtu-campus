@@ -33,16 +33,54 @@ if ((git remote) -contains "origin") { git remote remove origin | Out-Null }
 git remote add origin $Url
 git branch -M main
 
+# GitHub 直连在大陆常被重置，本机Clash 监听 7897。
+# 探测端口可用就只给本仓库配代理，不污染全局配置。
+$Proxy = "http://127.0.0.1:7897"
+$hasProxy = $false
+try {
+    $t = Test-NetConnection -ComputerName 127.0.0.1 -Port 7897 -WarningAction SilentlyContinue
+    $hasProxy = $t.TcpTestSucceeded
+} catch {}
+if ($hasProxy) {
+    Write-Host "  Using local proxy 127.0.0.1:7897 (repo-level)" -ForegroundColor DarkGray
+    git config http.proxy $Proxy
+    git config https.proxy $Proxy
+}
+# 大仓库 + 弱网络：拉高缓冲、关掉低速中断
+git config http.postBuffer "524288000"
+git config http.lowSpeedLimit "0"
+git config http.lowSpeedTime "999"
+
 Write-Host "  Pushing (about 13 MB, 1-2 min; GitHub will ask you to sign in)..." -ForegroundColor Cyan
 Write-Host ""
-git push -u origin main
-$code = $LASTEXITCODE
+
+# 直连 13MB 容易被重置，失败自动重试
+$code = 1
+for ($i = 1; $i -le 3; $i++) {
+    if ($i -gt 1) {
+        Write-Host "  retry $i/3 ..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 5
+    }
+    git push -u origin main
+    $code = $LASTEXITCODE
+    if ($code -eq 0) { break }
+}
 
 Write-Host ""
 if ($code -ne 0) {
     Write-Host "  PUSH FAILED." -ForegroundColor Red
-    Write-Host "  Most likely: repo '$Repo' not created yet." -ForegroundColor Yellow
-    Write-Host "  Create it at: https://github.com/new  (empty, Public, no README)" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  If it says 'Connection was reset' / 'Recv failure':" -ForegroundColor Yellow
+    Write-Host "    - network to GitHub was interrupted." -ForegroundColor Yellow
+    Write-Host "    - if Clash is running, make sure the port above matches" -ForegroundColor Yellow
+    Write-Host "      (default 7897), then just run this file again." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  If it says 'rejected (fetch first)':" -ForegroundColor Yellow
+    Write-Host "    - GitHub Actions pushed data on the remote." -ForegroundColor Yellow
+    Write-Host "    - run: git pull --rebase origin main, then push again." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  If the repo does not exist yet:" -ForegroundColor Yellow
+    Write-Host "    create it at https://github.com/new (empty, Public, no README)" -ForegroundColor Yellow
     Write-Host ""
     Read-Host "  Press Enter to close"
     exit $code
