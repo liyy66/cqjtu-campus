@@ -1,0 +1,5 @@
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+# crawl_news.py 用 lxml 解析，速度与容错都优于内置 html.parser。
+# 缺失时会触发 bs4.exceptions.FeatureNotFound，所以必须显式安装。
+lxml>=5.1.0

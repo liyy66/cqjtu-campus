@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+
+# 抓取中间产物：体积大且每轮都在变，
+# 真源保存在 state/news.jsonl 里，不进历史。
+data/news.json
+data/_list.json
+data/_last_update.json
+
+# 站点成品：每轮由 build_v3.py 重新生成，
+# 直接提交会让 git 反复重写大文件，仓库迅速臃肿。
+site/
+
+# 本地工作区私有内容：自动化日志、记忆笔记、应用配置。
+.workbuddy/
+
+# 本地临时文件
+*.exit
+_*.txt
+.wbapp_*.genie
+commit_msg.txt
