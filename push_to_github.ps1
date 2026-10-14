@@ -33,8 +33,9 @@ if ((git remote) -contains "origin") { git remote remove origin | Out-Null }
 git remote add origin $Url
 git branch -M main
 
-# GitHub 直连在大陆常被重置，本机Clash 监听 7897。
-# 探测端口可用就只给本仓库配代理，不污染全局配置。
+# GitHub 在大陆常被干扰，而本机 Clash（默认 7897）不一定开着。
+# 探测端口：有就只给本仓库配代理；没有就清掉代理配置走直连，
+# 否则会因"连不上代理"而失败（配置了代理但代理没运行 = 必然失败）。
 $Proxy = "http://127.0.0.1:7897"
 $hasProxy = $false
 try {
@@ -42,9 +43,13 @@ try {
     $hasProxy = $t.TcpTestSucceeded
 } catch {}
 if ($hasProxy) {
-    Write-Host "  Using local proxy 127.0.0.1:7897 (repo-level)" -ForegroundColor DarkGray
+    Write-Host "  Proxy detected: $Proxy (repo-level)" -ForegroundColor DarkGray
     git config http.proxy $Proxy
     git config https.proxy $Proxy
+} else {
+    git config --unset http.proxy 2>$null
+    git config --unset https.proxy 2>$null
+    Write-Host "  No local proxy detected, using direct connection" -ForegroundColor DarkGray
 }
 # 大仓库 + 弱网络：拉高缓冲、关掉低速中断
 git config http.postBuffer "524288000"
