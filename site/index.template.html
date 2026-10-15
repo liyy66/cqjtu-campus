@@ -288,21 +288,24 @@ button{font-family:inherit}
 @keyframes toastIn{from{opacity:0;transform:translateY(22px) scale(.92)}to{opacity:1;transform:none}}
 @keyframes toastOut{to{opacity:0;transform:translateY(14px) scale(.94)}}
 
-/* ============ 更新状态条 ============ */
-.update-bar{
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  background:var(--card);border:1px solid var(--line);border-radius:13px;
-  padding:9px 15px;margin:0 0 16px;font-size:12.5px;color:var(--muted);
+/* ============ 思考过程（DeepSeek 风格） ============ */
+.think-head{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:7px}
+.spin{
+  width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--blue);
+  border-radius:50%;display:inline-block;animation:spin .8s linear infinite;
 }
-.update-bar .dot{width:8px;height:8px;border-radius:50%;background:#7dffb3;flex-shrink:0}
-.update-bar.busy .dot{background:var(--gold);animation:pulse 1s infinite}
-.update-bar.fail .dot{background:#ff8f8f}
-.update-bar button{
-  margin-left:auto;border:1px solid var(--line);background:var(--bg2);color:var(--text);
-  font-size:12px;padding:5px 13px;border-radius:9px;cursor:pointer;transition:.2s;
+@keyframes spin{to{transform:rotate(360deg)}}
+.think-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--muted)}
+.think-steps li{display:flex;gap:8px;align-items:flex-start;animation:msgIn .3s ease}
+.think-log{white-space:normal;margin:0 0 9px;font-size:12px;color:var(--muted)}
+.think-log summary{
+  cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px;
+  padding:4px 9px;border:1px dashed var(--bubble-line);border-radius:9px;width:fit-content;
 }
-.update-bar button:hover{border-color:var(--blue2);color:var(--blue)}
-.update-bar button:active{transform:scale(.92)}
+.think-log summary::-webkit-details-marker{display:none}
+.think-log summary:hover{color:var(--blue);border-color:var(--blue2)}
+.think-log ul{list-style:none;margin:7px 0 2px;padding:0;display:flex;flex-direction:column;gap:4px}
+.think-log li::before{content:"✅ "}
 
 /* ============ 页脚 ============ */
 .foot{
@@ -362,7 +365,7 @@ body::after{
 }
 .main{position:relative;z-index:1}
 .topbar,.tabs{backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
-.chat-box,.news-card,.search-card,.update-bar,.modal-body{
+.chat-box,.news-card,.search-card,.modal-body{
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
   background:color-mix(in srgb,var(--card) 82%,transparent);
 }
@@ -529,9 +532,6 @@ body::after{
 
   <!-- ============ AI 问答 ============ -->
   <section id="panel-qa" class="panel active">
-    <div class="update-bar" id="updateBarQa">
-      <span class="dot"></span><span id="updateTextQa">数据由云端每 6 小时自动更新</span>
-    </div>
     <div class="chat-box" id="chatBox"></div>
     <div class="suggestions" id="suggestions">
       <button class="chip">学校简介</button>
@@ -551,9 +551,6 @@ body::after{
 
   <!-- ============ 新闻推送 ============ -->
   <section id="panel-feed" class="panel">
-    <div class="update-bar" id="updateBarFeed">
-      <span class="dot"></span><span id="updateTextFeed">数据由云端每 6 小时自动更新</span>
-    </div>
     <div class="toolbar">
       <div class="chip-row" id="feedColumns"></div>
       <div class="toolbar-right"><span class="stat" id="feedStat"></span></div>
@@ -852,11 +849,16 @@ let convs = [];
 let curConv = null;
 function loadConvs() {
   try { convs = JSON.parse(localStorage.getItem(CONV_KEY) || "[]"); } catch (e) { convs = []; }
-  if (!Array.isArray(convs) || !convs.length) convs = [newConv()];
-  curConv = convs[0];
+  if (!Array.isArray(convs)) convs = [];
+  /* 每个用户、每次打开页面都是一个全新对话；
+     历史对话只在侧栏里供回看，互不影响（localStorage 按浏览器隔离）。 */
+  curConv = newConv();
+  convs.unshift(curConv);
 }
 function saveConvs() {
-  try { localStorage.setItem(CONV_KEY, JSON.stringify(convs.slice(0, 60))); } catch (e) {}
+  /* 空对话不落盘，避免历史里堆一堆“新对话” */
+  const keep = convs.filter((c) => c.messages.length).slice(0, 60);
+  try { localStorage.setItem(CONV_KEY, JSON.stringify(keep)); } catch (e) {}
 }
 function newConv() {
   return { id: "c" + Date.now() + Math.random().toString(36).slice(2, 6), title: "新对话", created: Date.now(), messages: [] };
@@ -895,6 +897,10 @@ function renderConvList() {
     })
   );
 }
+function thinkLog(steps) {
+  if (!steps || !steps.length) return "";
+  return `<details class="think-log"><summary>🤔 思考过程（${steps.length} 步 · 点击展开）</summary><ul>${steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ul></details>`;
+}
 function renderChat() {
   const box = $("#chatBox");
   if (!curConv.messages.length) {
@@ -902,18 +908,20 @@ function renderChat() {
       你好！我是重庆交通大学校园助手 🎓<br>
       我只依据<strong>学校官网</strong>、<strong>官方新闻网</strong>、<strong>信息公开网</strong>和<strong>教务处</strong>公开信息回答问题，并给出每条答案的出处链接。<br>
       你可以问我：学校简介、校区地址、<em>转专业</em>、<em>绩点</em>、<em>辅修</em>、<em>综测</em>、招生咨询，或者“<em>昨天有什么新闻？</em>”等。<br>
-      🔎 新闻来自${NEWS.length}条官方报道，每6 小时自动更新一次。<br>
-      🗂 点左上角菜单可以<strong>新建对话</strong>、回看<strong>历史对话</strong>，也能<strong>导出/导入</strong>记录。
+      🔎 新闻来自${NEWS.length}条官方报道，由云端每6 小时自动更新。<br>
+      🗂 打开页面就是<strong>全新对话</strong>；点左上角菜单可回看<strong>历史对话</strong>，也能<strong>导出/导入</strong>记录。<br>
+      🧠 提问时我会把<strong>思考过程</strong>展示给你看。
     </div></div>`;
     return;
   }
   box.innerHTML = curConv.messages.map((m) => {
     if (m.role === "user") return `<div class="msg user"><div class="bubble">${esc(m.text)}</div></div>`;
-    return `<div class="msg bot"><div class="bubble">${esc(m.text)}${renderSources(m.sources)}</div></div>`;
+    return `<div class="msg bot"><div class="bubble">${thinkLog(m.think)}${esc(m.text)}${renderSources(m.sources)}</div></div>`;
   }).join("");
   box.scrollTop = box.scrollHeight;
 }
 $("#newChatBtn").addEventListener("click", () => {
+  if (!curConv.messages.length) { closeSide(); toast("现在已经是全新对话啦"); return; }
   const c = newConv();
   convs.unshift(c);
   curConv = c;
@@ -1132,22 +1140,9 @@ function parseArticle(html, url) {
   content = content.replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, "$1");
   return { title, date, source, author, content_html: content.trim(), content_text: content.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() };
 }
-function setUpdate(state, text) {
-  ["#updateBarQa", "#updateBarFeed"].forEach((id) => {
-    const bar = $(id);
-    if (!bar) return;
-    bar.classList.remove("busy", "fail");
-    if (state === "busy") bar.classList.add("busy");
-    if (state === "fail") bar.classList.add("fail");
-  });
-  ["#updateTextQa", "#updateTextFeed"].forEach((id) => { const el = $(id); if (el) el.textContent = text; });
-}
 /* 新闻数据由 GitHub Actions 每 6 小时在云端抓取，并随页面一起发布。
-   原版靠浏览器 CORS 代理抓官网，但免费代理已相继失效（实测 allorigins /
-   codetabs 均 522 超时，corsproxy 返回自身错误页），只会一直失败并弹警告，
-   所以浏览器端的抓取与「立即更新」按钮已一并移除。
+   浏览器端不再做任何同步/更新提示：数据永远是构建时的最新快照。
    fetchText() 仍保留：openArticle 在正文分桶缺失时会用它兜底抓单篇原文。 */
-setUpdate("ok", `📦 官方新闻由云端每6 小时自动更新（数据截至 ${EMBED.generated || ""}，共 ${NEWS.length} 条）`);
 
 /* ========================= AI 问答 ========================= */
 function esc(s) {
@@ -1317,11 +1312,43 @@ function ask(question, memoryQuery) {
   return { answer, sources: top };
 }
 
-function askFromInput() {
+/* ---- 思考过程：像 DeepSeek 一样展示「正在干什么」 ---- */
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function thinkPlan(q, memoryQuery) {
+  const steps = [];
+  const full = memoryQuery || q;
+  steps.push(`🧠 理解问题：「${full.slice(0, 26)}${full.length > 26 ? "…" : ""}」`);
+  const rng = detectDateRange(q) || detectDateRange(memoryQuery);
+  if (rng) {
+    steps.push(`📅 识别为日期类新闻查询（${rng[0]} 至 ${rng[1]}）`);
+    steps.push(`📚 在 ${NEWS.length} 条官方新闻中筛选该时段报道…`);
+    steps.push("🔗 整理官方出处链接…");
+  } else {
+    let hit = false;
+    for (const f of FAQ) {
+      if (f.keys.some((k) => q.includes(k) && k.length >= 2)) { hit = true; break; }
+    }
+    if (hit) {
+      steps.push("🔑 匹配到常见问题（FAQ）关键词");
+      steps.push("🔗 核对答案对应的官方出处…");
+    } else {
+      steps.push("🔍 未命中 FAQ，转入全文检索…");
+      steps.push(`📚 检索官方资料库（${NEWS.length} 条新闻 + ${KNOW.length} 篇知识条目）…`);
+      steps.push("🧩 抽取与问题最相关的段落…");
+      steps.push("🔗 核对官方出处链接…");
+    }
+  }
+  steps.push("✍️ 整理并生成回答…");
+  return steps;
+}
+
+let asking = false;
+async function askFromInput() {
   const input = $("#question");
   const q = input.value.trim();
-  if (!q) return;
+  if (!q || asking) return;
   input.value = "";
+  asking = true;
   const memoryQuery = buildQuery(q);
   /* 利用上文的追问，自动补齐话题词 */
   curConv.messages.push({ role: "user", text: q, ts: Date.now() });
@@ -1331,23 +1358,40 @@ function askFromInput() {
   }
   renderChat();
   const box = $("#chatBox");
-  const typing = document.createElement("div");
-  typing.className = "msg bot";
-  typing.innerHTML = '<div class="bubble"><span class="typing"><span></span><span></span><span></span></span></div>';
-  box.appendChild(typing);
+  /* 实时思考气泡：逐条展示正在做的事，最后随答案一起存进历史 */
+  const thinkEl = document.createElement("div");
+  thinkEl.className = "msg bot";
+  thinkEl.innerHTML = '<div class="bubble"><div class="think-head"><span class="spin"></span>思考中，正在为你检索官方资料…</div><ul class="think-steps"></ul></div>';
+  box.appendChild(thinkEl);
+  const ul = thinkEl.querySelector(".think-steps");
   box.scrollTop = box.scrollHeight;
-  setTimeout(async () => {
-    typing.remove();
-    /* 正文改为按需加载后，检索前先把命中候选的正文灌入，
-       这样「问正文里的内容」依然能答出来 */
-    try { await hydrateForSearch(new Set(tokenize(q).filter((t) => t.length >= 2))); } catch (e) {}
+  const steps = thinkPlan(q, memoryQuery);
+  try {
+    for (let i = 0; i < steps.length; i++) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="t-ico">⏳</span>${esc(steps[i])}`;
+      ul.appendChild(li);
+      box.scrollTop = box.scrollHeight;
+      /* 正文改为按需加载后，检索前先把命中候选的正文灌入，
+         这样「问正文里的内容」依然能答出来 */
+      if (i === 1) {
+        try { await hydrateForSearch(new Set(tokenize(q).filter((t) => t.length >= 2))); } catch (e) {}
+      } else {
+        await sleep(360);
+      }
+      li.querySelector(".t-ico").textContent = "✅";
+    }
     const r = ask(q, memoryQuery);
-    curConv.messages.push({ role: "bot", text: r.answer, sources: r.sources, ts: Date.now() });
+    curConv.messages.push({ role: "bot", text: r.answer, sources: r.sources, think: steps, ts: Date.now() });
     saveConvs();
     renderConvList();
     renderChat();
     haptic(12);
-  }, 180);
+  } finally {
+    thinkEl.remove();
+    asking = false;
+    box.scrollTop = box.scrollHeight;
+  }
 }
 $("#askBtn").addEventListener("click", askFromInput);
 $("#question").addEventListener("keydown", (e) => e.key === "Enter" && askFromInput());
@@ -1524,7 +1568,6 @@ renderConvList();
 renderChat();
 fxInit();
 applySkin(currentSkin(), true);
-setUpdate("ok", `📦 已加载官方新闻数据（截至 ${EMBED.generated || ""}，共 ${NEWS.length} 条）· 由云端每 6 小时自动更新`);
 </script>
 </body>
 </html>
